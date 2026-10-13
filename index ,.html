@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#020711" />
+<title>Scanora AI V3 — PrecisionScan Engine</title>
+<style>
+  :root{
+    --cyan:#35d7ff;
+    --cyan2:#00a8ff;
+    --blue:#2377ff;
+    --bg:#020711;
+    --glass:rgba(4,14,29,.62);
+    --line:rgba(100,220,255,.38);
+    --ok:#72f5c7;
+    --warn:#ffd66d;
+    --bad:#ff7c90;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  button{font:inherit}
+  #app{position:fixed;inset:0;background:#000;overflow:hidden}
+  #camera{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  #overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+  #detect{display:none}
+
+  .shade{position:absolute;inset:0;z-index:2;pointer-events:none;background:
+    radial-gradient(circle at 50% 48%,transparent 0 34%,rgba(0,0,0,.05) 58%,rgba(0,0,0,.35) 100%)}
+
+  .topbar{position:absolute;left:0;right:0;top:0;z-index:5;padding:max(16px,env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(to bottom,rgba(0,0,0,.50),transparent)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.13em;font-size:13px;text-transform:uppercase;text-shadow:0 0 18px rgba(53,215,255,.45)}
+  .orb{width:11px;height:11px;border-radius:50%;background:var(--cyan);box-shadow:0 0 9px var(--cyan),0 0 22px rgba(53,215,255,.8);animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{50%{transform:scale(1.35);opacity:.72}}
+
+  .scorebox{min-width:118px;padding:8px 10px;border:1px solid var(--line);border-radius:14px;background:var(--glass);backdrop-filter:blur(14px);box-shadow:0 8px 35px rgba(0,0,0,.25)}
+  .scoreline{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.12em;color:#bfefff;text-transform:uppercase;margin-bottom:6px}
+  .scoretrack{height:5px;background:rgba(255,255,255,.12);border-radius:20px;overflow:hidden}
+  #scorefill{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));box-shadow:0 0 12px var(--cyan);transition:width .16s linear}
+
+  .metrics{position:absolute;left:50%;top:max(74px,calc(env(safe-area-inset-top) + 63px));transform:translateX(-50%);z-index:5;display:flex;gap:7px;max-width:96vw;overflow:hidden}
+  .chip{padding:6px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(2,9,18,.48);backdrop-filter:blur(10px);font-size:10px;color:#dbefff;white-space:nowrap;transition:.2s}
+  .chip.good{border-color:rgba(114,245,199,.35);color:#caffed}
+  .chip.warn{border-color:rgba(255,214,109,.4);color:#ffe8a6}
+  .chip.bad{border-color:rgba(255,124,144,.45);color:#ffc3cd}
+
+  .bottom{position:absolute;left:0;right:0;bottom:0;z-index:5;padding:10px 16px max(22px,env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:14px;background:linear-gradient(to top,rgba(0,0,0,.58),transparent)}
+  .status{max-width:min(92vw,520px);padding:11px 17px;border-radius:999px;border:1px solid rgba(53,215,255,.28);background:rgba(2,11,22,.70);backdrop-filter:blur(16px);box-shadow:0 0 28px rgba(0,168,255,.12);font-size:13px;letter-spacing:.02em;text-align:center}
+  .controls{display:flex;align-items:center;justify-content:center;gap:16px}
+  .roundbtn{width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(4,14,29,.72);color:#fff;display:grid;place-items:center;backdrop-filter:blur(16px);cursor:pointer}
+  .roundbtn:active{transform:scale(.96)}
+  .shutter{width:70px;height:70px;border-radius:50%;border:2px solid rgba(255,255,255,.82);background:rgba(255,255,255,.08);padding:5px;cursor:pointer;box-shadow:0 0 28px rgba(53,215,255,.22)}
+  .shutter:before{content:"";display:block;width:100%;height:100%;border-radius:50%;background:linear-gradient(145deg,#fff,#a9ecff);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+  .shutter:active{transform:scale(.96)}
+  .smalllabel{font-size:9px;opacity:.75;letter-spacing:.10em;text-transform:uppercase;margin-top:2px;text-align:center}
+
+  #permission{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at 50% 25%,#0c263b 0,#04101f 35%,#01050b 75%)}
+  .card{width:min(92vw,520px);padding:28px;border:1px solid rgba(77,207,255,.22);border-radius:28px;background:linear-gradient(180deg,rgba(7,23,43,.90),rgba(2,8,16,.92));box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.05);text-align:center}
+  .logoMark{width:80px;height:80px;margin:0 auto 18px;border-radius:24px;border:1px solid rgba(53,215,255,.36);display:grid;place-items:center;box-shadow:0 0 45px rgba(0,168,255,.18);font-weight:900;font-size:24px;color:#dfffff}
+  .card h1{font-size:24px;margin:0 0 10px}.card p{margin:0 auto 22px;color:#aac5d6;line-height:1.52;font-size:14px;max-width:410px}
+  .primary{border:0;border-radius:16px;padding:14px 22px;background:linear-gradient(135deg,var(--cyan2),#476dff);color:#fff;font-weight:800;letter-spacing:.02em;box-shadow:0 14px 38px rgba(0,137,255,.28);cursor:pointer}
+  .note{font-size:11px;color:#7893a5;margin-top:13px;line-height:1.4}
+
+  #flash{position:absolute;inset:0;background:#e8fbff;opacity:0;pointer-events:none;z-index:19}
+  #flash.go{animation:flash .36s ease-out}@keyframes flash{0%{opacity:.9}100%{opacity:0}}
+
+  #result{position:absolute;inset:0;z-index:30;display:none;flex-direction:column;background:#050914}
+  .resultTop{padding:max(16px,env(safe-area-inset-top)) 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .resultTitle{font-weight:800;letter-spacing:.02em}.resultSub{font-size:11px;color:#8da9bd;margin-top:3px}
+  .resultViewport{flex:1;min-height:0;padding:8px 14px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 50%,rgba(22,55,85,.34),rgba(2,6,12,.8))}
+  #resultImg{display:block;max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;background:#fff;box-shadow:0 18px 65px rgba(0,0,0,.56)}
+  .modebar{padding:12px 12px 6px;display:flex;gap:8px;justify-content:center;overflow-x:auto}
+  .mode{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#bcd2e2;border-radius:999px;padding:9px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .mode.active{border-color:rgba(53,215,255,.5);background:rgba(0,168,255,.16);color:#e8fbff;box-shadow:0 0 22px rgba(53,215,255,.12)}
+  .resultActions{padding:8px 14px max(18px,env(safe-area-inset-bottom));display:flex;gap:10px}
+  .action{flex:1;border:1px solid rgba(255,255,255,.14);border-radius:15px;padding:13px 14px;background:rgba(255,255,255,.05);color:#fff;font-weight:700;cursor:pointer}
+  .action.primary{border:0;background:linear-gradient(135deg,#00b8ff,#4169ff)}
+
+  .toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);z-index:40;padding:14px 18px;border-radius:16px;background:rgba(1,7,14,.88);border:1px solid rgba(53,215,255,.25);backdrop-filter:blur(14px);font-size:13px;opacity:0;pointer-events:none;transition:.2s;text-align:center;max-width:80vw}
+  .toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+
+  @media (min-width:900px){
+    .metrics{top:84px}.status{font-size:14px}.shutter{width:76px;height:76px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="camera" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
+  <canvas id="detect"></canvas>
+  <div class="shade"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="orb"></span> Scanora AI <small style="opacity:.55;font-size:9px">PRECISION V3</small></div>
+    <div class="scorebox">
+      <div class="scoreline"><span>Capture confidence</span><span id="scoreText">0%</span></div>
+      <div class="scoretrack"><div id="scorefill"></div></div>
+    </div>
+  </div>
+
+  <div class="metrics">
+    <div id="chipFocus" class="chip">Focus —</div>
+    <div id="chipStable" class="chip">Stable —</div>
+    <div id="chipGlare" class="chip">Glare —</div>
+    <div id="chipFrame" class="chip">Frame —</div>
+  </div>
+
+  <div class="bottom">
+    <div id="status" class="status">Preparing vision engine…</div>
+    <div class="controls">
+      <div>
+        <button id="torchBtn" class="roundbtn" aria-label="Toggle torch">☀</button>
+        <div class="smalllabel">Light</div>
+      </div>
+      <button id="manualBtn" class="shutter" aria-label="Capture document"></button>
+      <div>
+        <button id="autoBtn" class="roundbtn" aria-label="Toggle automatic capture">A</button>
+        <div id="autoLabel" class="smalllabel">Auto on</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="permission">
+    <div class="card">
+      <div class="logoMark">AI</div>
+      <h1>Smart document vision</h1>
+      <p>Finds the page, locks onto its corners, waits for the sharpest moment, then straightens and cleans the scan automatically.</p>
+      <button id="startBtn" class="primary">Open scanner</button>
+      <div id="permissionNote" class="note">Camera access requires HTTPS or localhost. Your scan stays on this device unless you later connect an optional server.</div>
+    </div>
+  </div>
+
+  <div id="flash"></div>
+
+  <div id="result">
+    <div class="resultTop">
+      <div>
+        <div class="resultTitle">Scan complete</div>
+        <div class="resultSub" id="resultInfo">Perspective corrected • local processing</div>
+      </div>
+      <button id="closeResult" class="roundbtn" aria-label="Retake">×</button>
+    </div>
+    <div class="resultViewport"><img id="resultImg" alt="Scanned document preview" /></div>
+    <div class="modebar">
+      <button class="mode active" data-mode="clean">Clean</button>
+      <button class="mode" data-mode="color">Color</button>
+      <button class="mode" data-mode="bw">B&amp;W</button>
+    </div>
+    <div class="resultActions">
+      <button id="retakeBtn" class="action">Retake</button>
+      <button id="saveBtn" class="action primary">Save image</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+</div>
+
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const CONFIG = {
+    detectMaxWidth: 720,
+    detectFps: 18,
+    minAreaRatio: 0.10,
+    maxAreaRatio: 0.95,
+    captureThreshold: 0.70,
+    stableFramesNeeded: 3,
+    burstFrames: 5,
+    burstKeep: 3,
+    consensusMaxCornerDrift: 0.045,
+    identityHoldFrames: 7,
+    switchMargin: 0.14,
+    outputMaxDimension: 2600,
+    outputMaxPixels: 6_500_000,
+    autoCaptureCooldownMs: 1800,
+    // Optional future hook. Leave blank for a completely local scanner.
+    proDewarpEndpoint: ''
+  };
+
+  const el = {
+    video: document.getElementById('camera'),
+    overlay: document.getElementById('overlay'),
+    detect: document.getElementById('detect'),
+    permission: document.getElementById('permission'),
+    startBtn: document.getElementById('startBtn'),
+    permissionNote: document.getElementById('permissionNote'),
+    status: document.getElementById('status'),
+    scorefill: document.getElementById('scorefill'),
+    scoreText: document.getElementById('scoreText'),
+    chipFocus: document.getElementById('chipFocus'),
+    chipStable: document.getElementById('chipStable'),
+    chipGlare: document.getElementById('chipGlare'),
+    chipFrame: document.getElementById('chipFrame'),
+    manualBtn: document.getElementById('manualBtn'),
+    autoBtn: document.getElementById('autoBtn'),
+    autoLabel: document.getElementById('autoLabel'),
+    torchBtn: document.getElementById('torchBtn'),
+    flash: document.getElementById('flash'),
+    result: document.getElementById('result'),
+    resultImg: document.getElementById('resultImg'),
+    resultInfo: document.getElementById('resultInfo'),
+    closeResult: document.getElementById('closeResult'),
+    retakeBtn: document.getElementById('retakeBtn'),
+    saveBtn: document.getElementById('saveBtn'),
+    toast: document.getElementById('toast')
+  };
+
+  const ctx = el.overlay.getContext('2d');
+  const dctx = el.detect.getContext('2d', { willReadFrequently: true });
+
+  const state = {
+    cvReady: false,
+    cameraReady: false,
+    stream: null,
+    track: null,
+    running: false,
+    processing: false,
+    capturing: false,
+    auto: true,
+    torch: false,
+    lastDetectTs: 0,
+    stableCount: 0,
+    lastCaptureTs: 0,
+    rawQuadVideo: null,
+    smoothQuadVideo: null,
+    quality: null,
+    detectorConfidence: 0,
+    viewW: innerWidth,
+    viewH: innerHeight,
+    laserT: 0,
+    laserDirection: 1,
+    lockStrength: 0,
+    currentMode: 'clean',
+    resultUrls: {},
+    resultBlobs: {},
+    lastStatus: '',
+    frameSequence: 0,
+    lostFrames: 0,
+    identityQuadDetect: null,
+    identityScore: 0,
+    identityAge: 0
+  };
+
+  const clamp = (v, a=0, b=1) => Math.min(b, Math.max(a, v));
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+  const nowSec = () => performance.now()/1000;
+
+  class OneEuro {
+    constructor(minCutoff=1.3, beta=0.025, dCutoff=1.0){
+      this.minCutoff=minCutoff; this.beta=beta; this.dCutoff=dCutoff;
+      this.xPrev=null; this.dxPrev=0; this.tPrev=null;
+    }
+    alpha(cutoff, dt){
+      const tau = 1/(2*Math.PI*cutoff);
+      return 1/(1+tau/Math.max(dt, 1/240));
+    }
+    filter(x,t){
+      if(this.tPrev===null){ this.xPrev=x; this.tPrev=t; return x; }
+      const dt=Math.max(1/240, t-this.tPrev);
+      const dx=(x-this.xPrev)/dt;
+      const aD=this.alpha(this.dCutoff,dt);
+      const dxHat=this.dxPrev + aD*(dx-this.dxPrev);
+      const cutoff=this.minCutoff + this.beta*Math.abs(dxHat);
+      const a=this.alpha(cutoff,dt);
+      const xHat=this.xPrev + a*(x-this.xPrev);
+      this.xPrev=xHat; this.dxPrev=dxHat; this.tPrev=t;
+      return xHat;
+    }
+  }
+
+  class CornerTracker {
+    constructor(){ this.reset(); }
+    reset(){
+      this.filters = Array.from({length:8}, () => new OneEuro(1.15, 0.032, 1.0));
+      this.prevRaw = null;
+      this.smooth = null;
+      this.stability = 0;
+      this.lastSeen = 0;
+    }
+    update(raw, frameW, frameH, t=nowSec()){
+      if(!raw){
+        if(performance.now()-this.lastSeen > 650) this.reset();
+        return null;
+      }
+      this.lastSeen = performance.now();
+      const diag = Math.hypot(frameW, frameH);
+      if(this.prevRaw){
+        let motion=0;
+        for(let i=0;i<4;i++) motion += dist(raw[i], this.prevRaw[i]);
+        motion /= 4;
+        this.stability = clamp(1 - motion/(diag*0.012));
+      } else this.stability = 0;
+
+      const flat = raw.flatMap(p=>[p.x,p.y]);
+      const out = [];
+      for(let i=0;i<4;i++) out.push({x:this.filters[i*2].filter(flat[i*2],t), y:this.filters[i*2+1].filter(flat[i*2+1],t)});
+      this.prevRaw = raw.map(p=>({...p}));
+      this.smooth = out;
+      return out;
+    }
+  }
+  const tracker = new CornerTracker();
+
+  function waitForOpenCV(timeoutMs=20000){
+    return new Promise((resolve,reject)=>{
+      const start=performance.now();
+      const timer=setInterval(()=>{
+        try{
+          if(window.cv && cv.Mat && cv.imread){ clearInterval(timer); resolve(); }
+          else if(performance.now()-start>timeoutMs){ clearInterval(timer); reject(new Error('OpenCV failed to initialize')); }
+        }catch(e){}
+      },60);
+    });
+  }
+
+  function toast(msg, ms=1800){
+    el.toast.textContent=msg; el.toast.classList.add('show');
+    clearTimeout(toast._t); toast._t=setTimeout(()=>el.toast.classList.remove('show'),ms);
+  }
+
+  function resizeOverlay(){
+    const dpr=Math.min(devicePixelRatio || 1, 2);
+    state.viewW=innerWidth; state.viewH=innerHeight;
+    el.overlay.width=Math.round(state.viewW*dpr);
+    el.overlay.height=Math.round(state.viewH*dpr);
+    el.overlay.style.width=state.viewW+'px'; el.overlay.style.height=state.viewH+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function setupDetectCanvas(){
+    const vw=el.video.videoWidth, vh=el.video.videoHeight;
+    if(!vw||!vh) return;
+    const scale=Math.min(1, CONFIG.detectMaxWidth/vw);
+    el.detect.width=Math.max(320, Math.round(vw*scale));
+    el.detect.height=Math.round(vh*(el.detect.width/vw));
+  }
+
+  function viewTransform(){
+    const vw=el.video.videoWidth || 1, vh=el.video.videoHeight || 1;
+    const s=Math.max(state.viewW/vw, state.viewH/vh);
+    return {s, ox:(state.viewW-vw*s)/2, oy:(state.viewH-vh*s)/2};
+  }
+  function videoToView(p){ const t=viewTransform(); return {x:p.x*t.s+t.ox, y:p.y*t.s+t.oy}; }
+
+  function orderQuad(pts){
+    if(!pts || pts.length!==4) return null;
+    const sum=pts.map(p=>p.x+p.y), diff=pts.map(p=>p.x-p.y);
+    const iTL=sum.indexOf(Math.min(...sum)), iBR=sum.indexOf(Math.max(...sum));
+    const iTR=diff.indexOf(Math.max(...diff)), iBL=diff.indexOf(Math.min(...diff));
+    const ids=[iTL,iTR,iBR,iBL];
+    if(new Set(ids).size!==4){
+      const c={x:pts.reduce((s,p)=>s+p.x,0)/4, y:pts.reduce((s,p)=>s+p.y,0)/4};
+      const sorted=[...pts].sort((a,b)=>Math.atan2(a.y-c.y,a.x-c.x)-Math.atan2(b.y-c.y,b.x-c.x));
+      let start=0,min=Infinity; sorted.forEach((p,i)=>{const v=p.x+p.y;if(v<min){min=v;start=i;}});
+      const r=sorted.slice(start).concat(sorted.slice(0,start));
+      if(cross(r[0],r[1],r[2])<0) return [r[0],r[3],r[2],r[1]];
+      return r;
+    }
+    return [pts[iTL],pts[iTR],pts[iBR],pts[iBL]];
+  }
+  function cross(a,b,c){ return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x); }
+  function polyArea(q){
+    let a=0; for(let i=0;i<4;i++){const j=(i+1)%4; a += q[i].x*q[j].y-q[j].x*q[i].y;} return Math.abs(a)/2;
+  }
+  function angleScore(q){
+    const vals=[];
+    for(let i=0;i<4;i++){
+      const p=q[(i+3)%4], c=q[i], n=q[(i+1)%4];
+      const v1={x:p.x-c.x,y:p.y-c.y}, v2={x:n.x-c.x,y:n.y-c.y};
+      const d=(v1.x*v2.x+v1.y*v2.y)/(Math.hypot(v1.x,v1.y)*Math.hypot(v2.x,v2.y)+1e-6);
+      const deg=Math.acos(clamp(d,-1,1))*180/Math.PI;
+      vals.push(clamp(1-Math.abs(deg-90)/70));
+    }
+    return vals.reduce((s,v)=>s+v,0)/4;
+  }
+  function perspectiveScore(q){
+    const sides=[dist(q[0],q[1]),dist(q[1],q[2]),dist(q[2],q[3]),dist(q[3],q[0])];
+    const ratio=Math.min(...sides)/(Math.max(...sides)+1e-6);
+    return clamp((ratio-.20)/.45);
+  }
+  function edgeMarginScore(q,w,h){
+    let min=Infinity;
+    for(const p of q) min=Math.min(min,p.x,p.y,w-p.x,h-p.y);
+    return clamp(min/(Math.min(w,h)*0.045));
+  }
+
+  // PrecisionScan V3 detector:
+  // multi-hypothesis contour generation + paper/edge/geometry/temporal evidence.
+  // This is intentionally real classical CV. Neural ONNX signals can be added later
+  // without pretending a model exists when it is not bundled with this file.
+  function quadDriftNorm(a,b,w,h){
+    if(!a||!b) return 1;
+    const diag=Math.hypot(w,h)||1;
+    let d=0; for(let i=0;i<4;i++) d+=dist(a[i],b[i]);
+    return (d/4)/diag;
+  }
+
+  function sampleQuadEvidence(imageData,q,w,h){
+    // Fast paper-vs-surround evidence. Does NOT assume the page must be white.
+    const data=imageData.data;
+    const cx=q.reduce((z,p)=>z+p.x,0)/4, cy=q.reduce((z,p)=>z+p.y,0)/4;
+    const inside=[], outside=[];
+    const lumAt=(x,y)=>{
+      x=Math.max(0,Math.min(w-1,Math.round(x))); y=Math.max(0,Math.min(h-1,Math.round(y)));
+      const i=(y*w+x)*4, r=data[i],g=data[i+1],b=data[i+2];
+      return {l:.2126*r+.7152*g+.0722*b, sat:Math.max(r,g,b)-Math.min(r,g,b)};
+    };
+    // Interior samples pulled toward centroid so text/content does not dominate.
+    for(let k=0;k<4;k++){
+      const a=q[k], b=q[(k+1)%4];
+      for(let j=1;j<=5;j++){
+        const t=j/6, ex=a.x+(b.x-a.x)*t, ey=a.y+(b.y-a.y)*t;
+        inside.push(lumAt(ex*.72+cx*.28, ey*.72+cy*.28));
+        // sample just outside the side, away from centroid
+        const vx=ex-cx, vy=ey-cy, len=Math.hypot(vx,vy)||1;
+        outside.push(lumAt(ex+vx/len*10, ey+vy/len*10));
+      }
+    }
+    // center grid gives texture/print evidence without requiring text.
+    const vals=[];
+    for(let gy=-2;gy<=2;gy++) for(let gx=-2;gx<=2;gx++){
+      vals.push(lumAt(cx+gx*7,cy+gy*7).l);
+    }
+    const mean=a=>a.reduce((x,v)=>x+v,0)/(a.length||1);
+    const inL=mean(inside.map(v=>v.l)), outL=mean(outside.map(v=>v.l));
+    const inS=mean(inside.map(v=>v.sat));
+    const vm=mean(vals), variance=mean(vals.map(v=>(v-vm)*(v-vm)));
+    const separation=clamp(Math.abs(inL-outL)/55);
+    const neutral=clamp(1-inS/150); // weak signal only; colored documents remain valid
+    const texture=clamp(Math.sqrt(variance)/38);
+    return {separation,neutral,texture,luma:inL};
+  }
+
+  function perimeterEdgeSupport(edgeMat,q){
+    let hit=0,n=0;
+    for(let e=0;e<4;e++){
+      const a=q[e], b=q[(e+1)%4];
+      for(let j=0;j<36;j++){
+        const t=j/35, x=Math.round(a.x+(b.x-a.x)*t), y=Math.round(a.y+(b.y-a.y)*t);
+        let best=0;
+        for(let oy=-2;oy<=2&&!best;oy++) for(let ox=-2;ox<=2;ox++){
+          const xx=x+ox, yy=y+oy;
+          if(xx>=0&&yy>=0&&xx<edgeMat.cols&&yy<edgeMat.rows && edgeMat.ucharPtr(yy,xx)[0]>0){best=1;break;}
+        }
+        hit+=best; n++;
+      }
+    }
+    return n?hit/n:0;
+  }
+
+  function detectDocumentFromCanvas(canvas){
+    const cv=window.cv;
+    let src=null, gray=null, blur=null, edges=null, closed=null, kernel=null, contours=null, hierarchy=null;
+    try{
+      src=cv.imread(canvas);
+      gray=new cv.Mat(); blur=new cv.Mat(); edges=new cv.Mat(); closed=new cv.Mat();
+      cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0,cv.BORDER_DEFAULT);
+
+      const meanL=cv.mean(blur)[0];
+      const low=Math.max(18,meanL*.26), high=Math.max(62,meanL*.92);
+      cv.Canny(blur,edges,low,high,3,false);
+      kernel=cv.getStructuringElement(cv.MORPH_RECT,new cv.Size(5,5));
+      cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel,new cv.Point(-1,-1),2);
+
+      contours=new cv.MatVector(); hierarchy=new cv.Mat();
+      cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
+
+      const frameArea=canvas.width*canvas.height;
+      const pixels=dctx.getImageData(0,0,canvas.width,canvas.height);
+      const candidates=[];
+
+      for(let i=0;i<contours.size();i++){
+        const cnt=contours.get(i);
+        try{
+          const area0=Math.abs(cv.contourArea(cnt));
+          const ar0=area0/frameArea;
+          if(ar0<CONFIG.minAreaRatio*.55 || ar0>CONFIG.maxAreaRatio) continue;
+          const peri=cv.arcLength(cnt,true);
+          if(peri<120) continue;
+
+          // Generate several approximations instead of betting on one epsilon.
+          for(const eps of [.012,.018,.026,.038]){
+            const approx=new cv.Mat();
+            try{
+              cv.approxPolyDP(cnt,approx,eps*peri,true);
+              if(approx.rows!==4) continue;
+              if(cv.isContourConvex && !cv.isContourConvex(approx)) continue;
+              const pts=[]; for(let k=0;k<4;k++) pts.push({x:approx.data32S[k*2],y:approx.data32S[k*2+1]});
+              const q=orderQuad(pts); if(!q) continue;
+              const area=polyArea(q), ar=area/frameArea;
+              if(ar<CONFIG.minAreaRatio || ar>CONFIG.maxAreaRatio) continue;
+              candidates.push({q,area,source:'quad'});
+            } finally {approx.delete();}
+          }
+
+          // Recovery hypothesis: a broken contour can still yield a rotated rectangle.
+          // It is lower-priority evidence, never an automatic "perfect corner" claim.
+          if(ar0>CONFIG.minAreaRatio*.8){
+            try{
+              const rr=cv.minAreaRect(cnt), rp=cv.RotatedRect.points(rr);
+              const q=orderQuad(rp.map(p=>({x:p.x,y:p.y})));
+              if(q){
+                const area=polyArea(q), ar=area/frameArea;
+                if(ar>=CONFIG.minAreaRatio && ar<=CONFIG.maxAreaRatio) candidates.push({q,area,source:'recovered'});
+              }
+            }catch(e){}
+          }
+        } finally {cnt.delete();}
+      }
+
+      if(!candidates.length) return {quad:null,confidence:0,metrics:null,candidates:0};
+
+      // De-duplicate near-identical hypotheses.
+      const unique=[];
+      candidates.sort((a,b)=>b.area-a.area);
+      for(const c of candidates){
+        if(unique.some(u=>quadDriftNorm(c.q,u.q,canvas.width,canvas.height)<.012)) continue;
+        unique.push(c); if(unique.length>=14) break;
+      }
+
+      let best=null,bestScore=-1,bestSignals=null;
+      for(const c of unique){
+        const ar=c.area/frameArea;
+        const areaScore=ar<.22?clamp((ar-CONFIG.minAreaRatio)/.12):(ar>.90?clamp((.96-ar)/.06):1);
+        const shape=angleScore(c.q);
+        const persp=perspectiveScore(c.q);
+        const margin=edgeMarginScore(c.q,canvas.width,canvas.height);
+        const edge=perimeterEdgeSupport(closed,c.q);
+        const ev=sampleQuadEvidence(pixels,c.q,canvas.width,canvas.height);
+        const temporal=state.identityQuadDetect ? clamp(1-quadDriftNorm(c.q,state.identityQuadDetect,canvas.width,canvas.height)/.10) : .52;
+        const recoveryPenalty=c.source==='recovered'?.08:0;
+
+        // Evidence fusion. No single rectangle property can dominate.
+        let score=.18*areaScore+.13*shape+.10*persp+.11*margin+
+                  .20*edge+.11*ev.separation+.05*ev.neutral+.04*ev.texture+.08*temporal-recoveryPenalty;
+
+        // A tracked page is sticky: a new rectangle must win clearly before identity switches.
+        if(state.identityQuadDetect && temporal>.72) score+=.06;
+        score=clamp(score);
+
+        if(score>bestScore){bestScore=score;best=c;bestSignals={edge,temporal,...ev,areaScore,shape,persp,margin};}
+      }
+
+      if(!best) return {quad:null,confidence:0,metrics:null,candidates:unique.length};
+
+      // Identity persistence: avoid jumping from paper to clipboard/table on one frame.
+      if(state.identityQuadDetect){
+        const drift=quadDriftNorm(best.q,state.identityQuadDetect,canvas.width,canvas.height);
+        if(drift>.13 && bestScore < state.identityScore + CONFIG.switchMargin){
+          state.identityScore*=.94;
+          return {quad:state.identityQuadDetect.map(p=>({...p})),confidence:state.identityScore*.82,
+                  metrics:null,candidates:unique.length,predicted:true};
+        }
+      }
+      state.identityQuadDetect=best.q.map(p=>({...p}));
+      state.identityScore=state.identityAge?(.34*bestScore+.66*state.identityScore):bestScore;
+      state.identityAge++;
+
+      const bbox={
+        x:Math.max(0,Math.floor(Math.min(...best.q.map(p=>p.x)))),
+        y:Math.max(0,Math.floor(Math.min(...best.q.map(p=>p.y))))
+      };
+      bbox.w=Math.min(canvas.width-bbox.x,Math.ceil(Math.max(...best.q.map(p=>p.x))-bbox.x));
+      bbox.h=Math.min(canvas.height-bbox.y,Math.ceil(Math.max(...best.q.map(p=>p.y))-bbox.y));
+      if(bbox.w<20||bbox.h<20) return {quad:best.q,confidence:bestScore,metrics:null,candidates:unique.length};
+
+      let roi=null, lap=null, meanMat=null, stdMat=null, bright=null, edgeRoi=null;
+      let lapVar=0, glareRatio=0, luma=bestSignals.luma, edgeDensity=0;
+      try{
+        roi=gray.roi(new cv.Rect(bbox.x,bbox.y,bbox.w,bbox.h));
+        lap=new cv.Mat(); cv.Laplacian(roi,lap,cv.CV_64F);
+        meanMat=new cv.Mat(); stdMat=new cv.Mat(); cv.meanStdDev(lap,meanMat,stdMat);
+        const sd=stdMat.doubleAt(0,0); lapVar=sd*sd;
+        bright=new cv.Mat(); cv.threshold(roi,bright,250,255,cv.THRESH_BINARY);
+        glareRatio=cv.countNonZero(bright)/(bbox.w*bbox.h);
+        edgeRoi=closed.roi(new cv.Rect(bbox.x,bbox.y,bbox.w,bbox.h));
+        edgeDensity=cv.countNonZero(edgeRoi)/(bbox.w*bbox.h);
+      } finally {[roi,lap,meanMat,stdMat,bright,edgeRoi].forEach(m=>{try{m&&m.delete();}catch(e){}});}
+
+      return {
+        quad:best.q,
+        confidence:clamp(bestScore),
+        area:best.area,
+        candidates:unique.length,
+        signals:bestSignals,
+        metrics:{lapVar,glareRatio,luma,edgeDensity,areaRatio:best.area/frameArea,
+          margin:bestSignals.margin,perspective:bestSignals.persp,
+          edgeSupport:bestSignals.edge,temporal:bestSignals.temporal,
+          separation:bestSignals.separation}
+      };
+    } catch(err){
+      console.warn('PrecisionScan detection error',err);
+      return {quad:null,confidence:0,metrics:null,candidates:0};
+    } finally {[src,gray,blur,edges,closed,kernel,contours,hierarchy].forEach(m=>{try{m&&m.delete();}catch(e){}});}
+  }
+
+  function qualityFrom(detection, stability){
+    if(!detection?.quad || !detection.metrics) return null;
+    const m=detection.metrics;
+    const sharp=clamp((m.lapVar-25)/170);
+    const texture=clamp((m.edgeDensity-.008)/.085);
+    const glare=1-clamp((m.glareRatio-.01)/.12);
+    const lighting=1-clamp(Math.abs(m.luma-170)/145);
+    let coverage;
+    if(m.areaRatio<.28) coverage=clamp((m.areaRatio-.14)/.24);
+    else if(m.areaRatio>.88) coverage=clamp((.96-m.areaRatio)/.08);
+    else coverage=1;
+    const frame=m.margin;
+    const angle=m.perspective;
+    const edge=clamp((m.edgeDensity-.012)/.07);
+    const detect=clamp(detection.confidence);
+    const boundary=clamp(m.edgeSupport ?? edge);
+    const identity=clamp(m.temporal ?? .5);
+    const separation=clamp(m.separation ?? .5);
+    const scores={sharp,glare,lighting,coverage,frame,angle,edge,texture,detect,boundary,identity,separation,stability:clamp(stability)};
+    const weights={sharp:.18,glare:.10,lighting:.05,coverage:.07,frame:.10,angle:.06,edge:.04,texture:.03,detect:.10,boundary:.09,identity:.08,separation:.04,stability:.06};
+    let logSum=0,wSum=0;
+    for(const k of Object.keys(weights)){ const w=weights[k]; logSum += w*Math.log(Math.max(.04,scores[k])); wSum += w; }
+    let composite=Math.exp(logSum/wSum);
+    if(frame<.35 || sharp<.28 || stability<.35) composite*=.72;
+    if(glare<.30 || lighting<.28) composite*=.78;
+    if(detect<.45 || texture<.20) composite*=.82;
+    return {...scores,composite:clamp(composite)};
+  }
+
+  function statusFor(q){
+    if(!q) return 'Point at a document — Scanora will capture automatically…';
+    if(q.frame<.55) return 'Move back — keep all four corners inside';
+    if(q.coverage<.55) return 'Move a little closer';
+    if(q.sharp<.48) return 'Hold steady — improving focus';
+    if(q.glare<.55) return 'Tilt slightly to reduce glare';
+    if(q.angle<.45) return 'Reduce the camera angle';
+    if(q.stability<.82) return 'Hold steady — page identified';
+    if(q.composite>=CONFIG.captureThreshold) return 'Ready — capturing the sharpest frame';
+    return 'Analyzing page quality…';
+  }
+
+  function chip(node,label,val,good=.72,warn=.45,invert=false){
+    node.className='chip';
+    if(val==null){node.textContent=label+' —';return;}
+    const v=invert?1-val:val;
+    node.textContent=label+' '+Math.round(v*100)+'%';
+    if(v>=good) node.classList.add('good'); else if(v>=warn) node.classList.add('warn'); else node.classList.add('bad');
+  }
+
+  function updateHUD(q){
+    const score=q?.composite||0;
+    el.scorefill.style.width=Math.round(score*100)+'%'; el.scoreText.textContent=Math.round(score*100)+'%';
+    chip(el.chipFocus,'Focus',q?.sharp); chip(el.chipStable,'Stable',q?.stability); chip(el.chipGlare,'Glare',q?.glare); chip(el.chipFrame,'Frame',q?.frame);
+    const s=statusFor(q); if(s!==state.lastStatus){el.status.textContent=s; state.lastStatus=s;}
+  }
+
+  function drawOverlay(){
+    ctx.clearRect(0,0,state.viewW,state.viewH);
+    const qv=state.smoothQuadVideo;
+    if(!qv) return;
+    const q=qv.map(videoToView);
+    const quality=state.quality?.composite||0;
+    state.lockStrength=lerp(state.lockStrength,quality,.18);
+
+    // Soft inner tint to make the detected surface feel "locked" without hiding document detail.
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(q[0].x,q[0].y); for(let i=1;i<4;i++)ctx.lineTo(q[i].x,q[i].y); ctx.closePath();
+    ctx.fillStyle=`rgba(0,168,255,${0.025+state.lockStrength*.035})`; ctx.fill();
+
+    // Outer halo + crisp edge.
+    ctx.shadowColor='#2ed8ff'; ctx.shadowBlur=20; ctx.strokeStyle='rgba(42,215,255,.96)'; ctx.lineWidth=3;
+    ctx.stroke(); ctx.shadowBlur=5; ctx.strokeStyle='rgba(220,251,255,.96)'; ctx.lineWidth=1; ctx.stroke();
+
+    // Smart corner brackets.
+    q.forEach((p,i)=>{
+      const prev=q[(i+3)%4], next=q[(i+1)%4];
+      const l=18;
+      const vp={x:(prev.x-p.x),y:(prev.y-p.y)}, vn={x:(next.x-p.x),y:(next.y-p.y)};
+      const lp=Math.hypot(vp.x,vp.y)||1, ln=Math.hypot(vn.x,vn.y)||1;
+      ctx.shadowColor='#4cecff'; ctx.shadowBlur=14; ctx.strokeStyle='#d8fbff'; ctx.lineWidth=2.2;
+      ctx.beginPath(); ctx.moveTo(p.x+vp.x/lp*l,p.y+vp.y/lp*l); ctx.lineTo(p.x,p.y); ctx.lineTo(p.x+vn.x/ln*l,p.y+vn.y/ln*l); ctx.stroke();
+    });
+
+    // Perspective-aware laser. The endpoints are interpolated on the live left/right page edges.
+    const t=state.laserT;
+    const left={x:lerp(q[0].x,q[3].x,t),y:lerp(q[0].y,q[3].y,t)};
+    const right={x:lerp(q[1].x,q[2].x,t),y:lerp(q[1].y,q[2].y,t)};
+    const grad=ctx.createLinearGradient(left.x,left.y,right.x,right.y);
+    grad.addColorStop(0,'rgba(0,170,255,0)'); grad.addColorStop(.12,'rgba(0,220,255,.82)'); grad.addColorStop(.5,'rgba(255,255,255,.98)'); grad.addColorStop(.88,'rgba(0,220,255,.82)'); grad.addColorStop(1,'rgba(0,170,255,0)');
+    ctx.shadowColor='#00dfff'; ctx.shadowBlur=22; ctx.strokeStyle=grad; ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(left.x,left.y);ctx.lineTo(right.x,right.y);ctx.stroke();
+    ctx.shadowBlur=6; ctx.strokeStyle='rgba(255,255,255,.95)';ctx.lineWidth=1;ctx.stroke();
+    ctx.restore();
+  }
+
+  function renderLoop(){
+    if(state.running && !state.capturing){
+      const speed=.007 + (state.quality?.composite||0)*.005;
+      state.laserT += speed*state.laserDirection;
+      if(state.laserT>=1){state.laserT=1;state.laserDirection=-1;} else if(state.laserT<=0){state.laserT=0;state.laserDirection=1;}
+      drawOverlay();
+    }
+    requestAnimationFrame(renderLoop);
+  }
+
+  async function analyzeCurrentVideo(){
+    if(!state.cvReady || !state.cameraReady || state.processing || state.capturing) return;
+    state.processing=true;
+    try{
+      dctx.drawImage(el.video,0,0,el.detect.width,el.detect.height);
+      const det=detectDocumentFromCanvas(el.detect);
+      if(det.quad){
+        state.lostFrames=0;
+        const sx=el.video.videoWidth/el.detect.width, sy=el.video.videoHeight/el.detect.height;
+        const rawVideo=det.quad.map(p=>({x:p.x*sx,y:p.y*sy}));
+        state.rawQuadVideo=rawVideo;
+        state.smoothQuadVideo=tracker.update(rawVideo,el.video.videoWidth,el.video.videoHeight);
+        state.detectorConfidence=det.confidence;
+        const q=qualityFrom(det,tracker.stability);
+        state.quality=q;
+        updateHUD(q);
+
+        const captureReady = state.auto && q &&
+          q.composite>=CONFIG.captureThreshold &&
+          q.stability>=.68 && q.sharp>=.42 && q.glare>=.38 &&
+          q.detect>=.52 && (q.boundary>=.38 || q.identity>=.72);
+        state.stableCount = captureReady ? state.stableCount+1 : 0;
+        if(captureReady && state.stableCount>=CONFIG.stableFramesNeeded && performance.now()-state.lastCaptureTs>CONFIG.autoCaptureCooldownMs){
+          state.stableCount=0;
+          await autoCaptureBurst();
+        }
+      } else {
+        state.lostFrames++;
+        state.stableCount=0; // never auto-capture from prediction alone
+        if(state.lostFrames<=CONFIG.identityHoldFrames && state.smoothQuadVideo){
+          el.status.textContent='Tracking page through a weak edge…';
+          state.identityScore*=.90;
+        } else {
+          state.rawQuadVideo=null; state.smoothQuadVideo=null; state.quality=null;
+          state.identityQuadDetect=null; state.identityScore=0; state.identityAge=0;
+          updateHUD(null);
+        }
+        tracker.update(null,el.video.videoWidth,el.video.videoHeight);
+      }
+    } finally {state.processing=false;}
+  }
+
+  function scheduleDetection(now){
+    if(!state.running) return;
+    const minGap=1000/CONFIG.detectFps;
+    if(now-state.lastDetectTs>=minGap){state.lastDetectTs=now; analyzeCurrentVideo();}
+    if(el.video.requestVideoFrameCallback) el.video.requestVideoFrameCallback(scheduleDetection);
+    else requestAnimationFrame(scheduleDetection);
+  }
+
+  function nextVideoFrame(){
+    return new Promise(resolve=>{
+      if(el.video.requestVideoFrameCallback) el.video.requestVideoFrameCallback(()=>resolve());
+      else requestAnimationFrame(()=>resolve());
+    });
+  }
+
+  async function captureBitmap(){
+    if(window.createImageBitmap) return await createImageBitmap(el.video);
+    const c=document.createElement('canvas'); c.width=el.video.videoWidth;c.height=el.video.videoHeight; c.getContext('2d').drawImage(el.video,0,0);
+    return await createImageBitmap(c);
+  }
+
+  async function analyzeBitmap(bitmap){
+    dctx.drawImage(bitmap,0,0,el.detect.width,el.detect.height);
+    const det=detectDocumentFromCanvas(el.detect);
+    if(!det.quad) return null;
+    const sx=bitmap.width/el.detect.width, sy=bitmap.height/el.detect.height;
+    const quadVideo=det.quad.map(p=>({x:p.x*sx,y:p.y*sy}));
+    // During a burst, geometry is judged independently; sharpness carries the most weight.
+    const q=qualityFrom(det,1);
+    return {det,q,quadVideo};
+  }
+
+  async function autoCaptureBurst(force=false){
+    if(state.capturing || !state.cameraReady) return;
+    state.capturing=true; state.lastCaptureTs=performance.now();
+    el.status.textContent=force?'Capturing…':'Locked — sampling the sharpest frame…';
+    const samples=[];
+    try{
+      const count=force?1:CONFIG.burstFrames;
+      for(let i=0;i<count;i++){
+        await nextVideoFrame();
+        const bitmap=await captureBitmap();
+        const analysis=await analyzeBitmap(bitmap);
+        if(analysis){
+          const rank=(analysis.q?.sharp||0)*.52+(analysis.q?.glare||0)*.12+(analysis.q?.frame||0)*.10+(analysis.q?.detect||0)*.11+(analysis.q?.angle||0)*.07+(analysis.q?.lighting||0)*.08;
+          samples.push({bitmap,...analysis,rank});
+        } else if(force && state.smoothQuadVideo){
+          samples.push({bitmap,quadVideo:state.smoothQuadVideo.map(p=>({...p})),rank:.1,q:state.quality});
+        } else bitmap.close?.();
+      }
+      if(!samples.length){ toast('I could not lock all four corners. Try again.'); return; }
+      // Temporal consensus: reject burst frames whose page geometry disagrees with the group.
+      // This prevents a hand, table edge, or one bad contour from winning merely because it is sharp.
+      const normQuad=s=>s.quadVideo.map(p=>({x:p.x/s.bitmap.width,y:p.y/s.bitmap.height}));
+      const nq=samples.map(normQuad);
+      const median=[];
+      for(let k=0;k<4;k++){
+        const xs=nq.map(q=>q[k].x).sort((a,b)=>a-b), ys=nq.map(q=>q[k].y).sort((a,b)=>a-b);
+        median.push({x:xs[Math.floor(xs.length/2)],y:ys[Math.floor(ys.length/2)]});
+      }
+      samples.forEach((s,i)=>{
+        let drift=0; for(let k=0;k<4;k++) drift+=Math.hypot(nq[i][k].x-median[k].x,nq[i][k].y-median[k].y);
+        drift/=4; s.consensus=clamp(1-drift/CONFIG.consensusMaxCornerDrift);
+        s.rank*=0.72+0.28*s.consensus;
+      });
+      samples.sort((a,b)=>b.rank-a.rank);
+      const accepted=samples.filter(s=>s.consensus>.42).slice(0,CONFIG.burstKeep);
+      const best=(accepted[0]||samples[0]);
+      samples.filter(s=>s!==best).forEach(s=>s.bitmap.close?.());
+      flash();
+      await processBestFrame(best.bitmap,best.quadVideo,{...best.q,burstConsensus:best.consensus,samplesAccepted:accepted.length});
+      best.bitmap.close?.();
+    } catch(err){
+      console.error(err); toast('Capture failed. Please try again.');
+    } finally {
+      state.capturing=false;
+    }
+  }
+
+  function flash(){el.flash.classList.remove('go');void el.flash.offsetWidth;el.flash.classList.add('go');}
+
+  function outputSize(q,w,h){
+    const top=dist(q[0],q[1]), bottom=dist(q[3],q[2]), left=dist(q[0],q[3]), right=dist(q[1],q[2]);
+    let outW=Math.max(500,Math.round(Math.max(top,bottom))), outH=Math.max(500,Math.round(Math.max(left,right)));
+    const maxD=Math.max(outW,outH); let s=1;
+    if(maxD>CONFIG.outputMaxDimension) s=Math.min(s,CONFIG.outputMaxDimension/maxD);
+    if(outW*outH>CONFIG.outputMaxPixels) s=Math.min(s,Math.sqrt(CONFIG.outputMaxPixels/(outW*outH)));
+    outW=Math.max(500,Math.round(outW*s)); outH=Math.max(500,Math.round(outH*s));
+    return {outW,outH};
+  }
+
+  async function canvasBlob(canvas,type='image/jpeg',quality=.95){
+    return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Blob encoding failed')),type,quality));
+  }
+
+  function revokeResults(){
+    Object.values(state.resultUrls).forEach(u=>{try{URL.revokeObjectURL(u);}catch(e){}});
+    state.resultUrls={}; state.resultBlobs={};
+  }
+
+  async function processBestFrame(bitmap, quad, quality){
+    if(!quad) throw new Error('No document quad');
+    el.status.textContent='Straightening and cleaning the page…';
+    const srcCanvas=document.createElement('canvas'); srcCanvas.width=bitmap.width; srcCanvas.height=bitmap.height; srcCanvas.getContext('2d').drawImage(bitmap,0,0);
+    const {outW,outH}=outputSize(quad,bitmap.width,bitmap.height);
+    let src=null, warped=null, srcPts=null, dstPts=null, M=null;
+    const cv=window.cv;
+    try{
+      src=cv.imread(srcCanvas); warped=new cv.Mat();
+      srcPts=cv.matFromArray(4,1,cv.CV_32FC2,[quad[0].x,quad[0].y,quad[1].x,quad[1].y,quad[2].x,quad[2].y,quad[3].x,quad[3].y]);
+      dstPts=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,outW-1,0,outW-1,outH-1,0,outH-1]);
+      M=cv.getPerspectiveTransform(srcPts,dstPts);
+      cv.warpPerspective(src,warped,M,new cv.Size(outW,outH),cv.INTER_LINEAR,cv.BORDER_REPLICATE,new cv.Scalar());
+
+      revokeResults();
+      const temp=document.createElement('canvas'); temp.width=outW; temp.height=outH;
+
+      // Color: perspective-corrected pixels only.
+      cv.imshow(temp,warped);
+      state.resultBlobs.color=await canvasBlob(temp,'image/jpeg',.95);
+
+      // Clean: illumination flattening + contrast + mild non-generative sharpening.
+      let gray=null,bg=null,norm=null,norm8=null,blur=null,sharp=null,bw=null;
+      try{
+        gray=new cv.Mat(); cv.cvtColor(warped,gray,cv.COLOR_RGBA2GRAY);
+        bg=new cv.Mat(); cv.GaussianBlur(gray,bg,new cv.Size(31,31),0,0,cv.BORDER_DEFAULT);
+        norm=new cv.Mat();
+        try{cv.divide(gray,bg,norm,255,-1);}catch(e){gray.copyTo(norm);}
+        norm8=new cv.Mat(); cv.normalize(norm,norm8,0,255,cv.NORM_MINMAX,cv.CV_8U);
+        blur=new cv.Mat(); cv.GaussianBlur(norm8,blur,new cv.Size(3,3),0,0,cv.BORDER_DEFAULT);
+        sharp=new cv.Mat(); cv.addWeighted(norm8,1.42,blur,-.42,0,sharp,-1);
+        cv.imshow(temp,sharp);
+        state.resultBlobs.clean=await canvasBlob(temp,'image/jpeg',.96);
+
+        bw=new cv.Mat(); cv.adaptiveThreshold(sharp,bw,255,cv.ADAPTIVE_THRESH_GAUSSIAN_C,cv.THRESH_BINARY,31,11);
+        cv.imshow(temp,bw);
+        state.resultBlobs.bw=await canvasBlob(temp,'image/png');
+      } catch(enhErr){
+        console.warn('Enhancement fallback',enhErr);
+        state.resultBlobs.clean=state.resultBlobs.color;
+        state.resultBlobs.bw=state.resultBlobs.color;
+      } finally {[gray,bg,norm,norm8,blur,sharp,bw].forEach(m=>{try{m&&m.delete();}catch(e){}});}
+
+      for(const [mode,blob] of Object.entries(state.resultBlobs)) state.resultUrls[mode]=URL.createObjectURL(blob);
+      state.currentMode='clean';
+      document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('active',b.dataset.mode==='clean'));
+      el.resultImg.src=state.resultUrls.clean;
+      const conf=Math.round((quality?.composite||0)*100);
+      const consensus=quality?.burstConsensus!=null?Math.round(quality.burstConsensus*100):null;
+      const accepted=quality?.samplesAccepted||1;
+      el.resultInfo.textContent=`Perspective corrected • ${accepted}-frame temporal check${conf?` • ${conf}% quality`:''}${consensus!=null?` • ${consensus}% geometry lock`:''}`;
+      el.result.style.display='flex';
+      state.running=false;
+
+      // Optional professional dewarping hook can be added without changing the real-time camera path.
+      // If CONFIG.proDewarpEndpoint is configured, upload state.resultBlobs.color there and replace a mode with the returned image.
+    } finally {[src,warped,srcPts,dstPts,M].forEach(m=>{try{m&&m.delete();}catch(e){}});}
+  }
+
+  async function startCamera(){
+    if(state.cameraReady) return;
+    el.status.textContent='Opening camera…';
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API unavailable. Use HTTPS on a modern browser.');
+    const stream=await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:60}}
+    });
+    state.stream=stream; el.video.srcObject=stream; await el.video.play();
+    await new Promise(r=>{if(el.video.videoWidth)r();else el.video.onloadedmetadata=()=>r();});
+    state.track=stream.getVideoTracks()[0]; state.cameraReady=true; setupDetectCanvas(); resizeOverlay();
+    const caps=state.track.getCapabilities?.() || {};
+    el.torchBtn.style.opacity=caps.torch?'1':'.38';
+  }
+
+  async function begin(){
+    el.startBtn.disabled=true; el.startBtn.textContent='Starting…';
+    try{
+      const [cvResult,camResult]=await Promise.allSettled([waitForOpenCV(),startCamera()]);
+      if(cvResult.status==='rejected') throw cvResult.reason; state.cvReady=true;
+      if(camResult.status==='rejected') throw camResult.reason;
+      state.running=true; el.permission.style.display='none'; el.status.textContent='Point at a document — Scanora will capture automatically…';
+      updateHUD(null);
+      if(el.video.requestVideoFrameCallback) el.video.requestVideoFrameCallback(scheduleDetection); else requestAnimationFrame(scheduleDetection);
+    } catch(err){
+      console.error(err); el.permissionNote.textContent=(err?.message||String(err))+' — Make sure camera permission is allowed and the page is served over HTTPS or localhost.';
+      el.startBtn.disabled=false; el.startBtn.textContent='Try again';
+    }
+  }
+
+  async function toggleTorch(){
+    const caps=state.track?.getCapabilities?.() || {};
+    if(!caps.torch){toast('Torch control is not available in this browser.');return;}
+    state.torch=!state.torch;
+    try{await state.track.applyConstraints({advanced:[{torch:state.torch}]}); el.torchBtn.style.boxShadow=state.torch?'0 0 24px rgba(53,215,255,.55)':'';}catch(e){state.torch=false;toast('Unable to change the camera light.');}
+  }
+
+  function resumeScanner(){
+    el.result.style.display='none'; revokeResults(); state.running=true; state.stableCount=0; state.lastCaptureTs=performance.now(); tracker.reset(); state.smoothQuadVideo=null; state.rawQuadVideo=null; state.quality=null; updateHUD(null);
+    if(el.video.requestVideoFrameCallback) el.video.requestVideoFrameCallback(scheduleDetection); else requestAnimationFrame(scheduleDetection);
+  }
+
+  function switchMode(mode){
+    if(!state.resultUrls[mode]) return;
+    state.currentMode=mode; el.resultImg.src=state.resultUrls[mode];
+    document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  }
+
+  function saveCurrent(){
+    const url=state.resultUrls[state.currentMode]; if(!url)return;
+    const a=document.createElement('a'); a.href=url; a.download=`scanora-${new Date().toISOString().replace(/[:.]/g,'-')}.${state.currentMode==='bw'?'png':'jpg'}`; document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  el.startBtn.addEventListener('click',begin);
+  el.manualBtn.addEventListener('click',()=>autoCaptureBurst(true));
+  el.autoBtn.addEventListener('click',()=>{state.auto=!state.auto;el.autoLabel.textContent=state.auto?'Auto on':'Auto off';el.autoBtn.style.opacity=state.auto?'1':'.5';toast(state.auto?'Automatic capture on':'Automatic capture off');});
+  el.torchBtn.addEventListener('click',toggleTorch);
+  el.retakeBtn.addEventListener('click',resumeScanner); el.closeResult.addEventListener('click',resumeScanner); el.saveBtn.addEventListener('click',saveCurrent);
+  document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>switchMode(b.dataset.mode)));
+  addEventListener('resize',()=>{resizeOverlay(); if(state.cameraReady)setupDetectCanvas();});
+  addEventListener('orientationchange',()=>setTimeout(()=>{resizeOverlay(); if(state.cameraReady)setupDetectCanvas();},250));
+  document.addEventListener('visibilitychange',()=>{if(document.hidden) state.running=false; else if(state.cameraReady && el.result.style.display!=='flex'){state.running=true;if(el.video.requestVideoFrameCallback)el.video.requestVideoFrameCallback(scheduleDetection);}});
+  addEventListener('beforeunload',()=>state.stream?.getTracks().forEach(t=>t.stop()));
+
+  resizeOverlay(); renderLoop();
+})();
+</script>
+</body>
+</html>
